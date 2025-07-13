@@ -1,0 +1,1 @@
+print("AsterAuto bot запущен")
