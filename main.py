@@ -3,8 +3,8 @@ import datetime
 import openai
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    ContextTypes, MessageHandler, filters
+    ApplicationBuilder, CommandHandler, ContextTypes,
+    MessageHandler, CallbackQueryHandler, filters
 )
 from config import TELEGRAM_BOT_TOKEN, OPENAI_API_KEY
 
@@ -31,12 +31,14 @@ THEMES = {
     }
 }
 
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = ReplyKeyboardMarkup(
         [["📌 Гарантия 365"], ["📂 Мои результаты", "❓ Задать вопрос"], ["🧠 Потренироваться"]],
         resize_keyboard=True
     )
     await update.message.reply_text("👋 Добро пожаловать! Выберите тему или режим:", reply_markup=keyboard)
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -121,6 +123,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"⚠ Ошибка OpenAI: {str(e)}")
         return
 
+
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
@@ -143,6 +146,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_states[user_id]["score"] += 1
         user_states[user_id]["current"] += 1
         await send_question(update, context, user_id)
+
 
 async def send_question(update_or_query, context, user_id):
     state = user_states[user_id]
@@ -170,6 +174,7 @@ async def send_question(update_or_query, context, user_id):
     buttons = [[InlineKeyboardButton(opt, callback_data=f"{index}:{i}")] for i, opt in enumerate(q["options"])]
     await context.bot.send_message(chat_id=user_id, text=f"🧪 {q['q']}", reply_markup=InlineKeyboardMarkup(buttons))
 
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
@@ -177,6 +182,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callback))
     print("🚀 Бот AsterAuto запущен")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
