@@ -1,12 +1,12 @@
 import os
-import logging
 import datetime
 import openai
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
     Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 )
-from config import TELEGRAM_BOT_TOKEN, OPENAI_API_KEY
+from config import TELEGRAM_BOT_TOKEN, OPENAI_API_KEY, ADMIN_ID
+from knowledge_base import find_relevant_chunks, load_documents, knowledge_base
 
 openai.api_key = OPENAI_API_KEY
 
@@ -55,10 +55,10 @@ def handle_message(update: Update, context: CallbackContext):
         if not results:
             update.message.reply_text("📭 Вы ещё не проходили квизы.")
         else:
-            text = "🗂 Ваши результаты:\n" + "\n".join(
+            result_text = "🗂 Ваши результаты:\n" + "\n".join(
                 [f"• {r['theme']} — {r['score']}/{r['total']} ({r['date']})" for r in results]
             )
-            update.message.reply_text(text)
+            update.message.reply_text(result_text)
         return
 
     if text == "❓ Задать вопрос":
@@ -69,8 +69,7 @@ def handle_message(update: Update, context: CallbackContext):
     if text == "🧠 Потренироваться":
         user_states[user_id] = {"mode": "select_role"}
         update.message.reply_text("Выберите роль:",
-            reply_markup=ReplyKeyboardMarkup([["🙋‍♂️ Я клиент", "💼 Я менеджер"]], resize_keyboard=True)
-        )
+            reply_markup=ReplyKeyboardMarkup([["🙋‍♂️ Я клиент", "💼 Я менеджер"]], resize_keyboard=True))
         return
 
     if text == "🙋‍♂️ Я клиент":
@@ -92,18 +91,19 @@ def handle_message(update: Update, context: CallbackContext):
     mode = user_states.get(user_id, {}).get("mode", "")
     if mode in ["chat", "train"]:
         role = user_states[user_id].get("role", "client")
-        if mode == "chat":
-            system_prompt = "Ты — помощник автосалона. Отвечай кратко и по делу."
-        elif role == "client":
-            system_prompt = "Ты — консультант AsterAuto. Отвечай просто и понятно, как клиенту."
-        else:
-            system_prompt = "Ты — тренер для новых менеджеров автосалона. Объясняй подробно и профессионально."
+        context_chunks = find_relevant_chunks(text, role) if mode == "train" else []
+
+        system_prompt = {
+            "chat": "Ты — помощник автосалона. Отвечай кратко и по делу.",
+            "client": "Ты — консультант AsterAuto. Отвечай как клиенту: просто, уверенно и по делу.",
+            "manager": "Ты — тренер для новых менеджеров AsterAuto. Объясняй профессионально и с опорой на скрипты."
+        }[role if mode == "train" else "chat"]
 
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": system_prompt + ("\n\n📚 Информация:\n" + "\n---\n".join(context_chunks) if context_chunks else "")},
                     {"role": "user", "content": text}
                 ]
             )
@@ -151,22 +151,50 @@ def send_question(chat_id, bot, user_id):
             "date": datetime.datetime.now().strftime("%Y-%m-%d")
         })
         user_states[user_id]["mode"] = "theme"
-        bot.send_message(
-            chat_id=chat_id,
-            text=f"✅ Квиз завершён!\nВы ответили правильно на {score} из {total}."
-        )
+        bot.send_message(chat_id=chat_id, text=f"✅ Квиз завершён!\nВы ответили правильно на {score} из {total}.")
         return
 
     q = quiz[index]
     buttons = [[InlineKeyboardButton(opt, callback_data=f"{index}:{i}")] for i, opt in enumerate(q["options"])]
     bot.send_message(chat_id=chat_id, text=f"🧪 {q['q']}", reply_markup=InlineKeyboardMarkup(buttons))
 
+def handle_document(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        update.message.reply_text("❌ У вас нет прав загружать документы.")
+        return
+
+    doc = update.message.document
+    if not doc:
+        update.message.reply_text("⚠️ Не удалось получить файл.")
+        return
+
+    os.makedirs("presentations", exist_ok=True)
+    file_path = f"presentations/{doc.file_name}"
+    doc.get_file().download(custom_path=file_path)
+    update.message.reply_text(f"✅ Файл «{doc.file_name}» загружен в папку /presentations.")
+
+def reload_knowledge(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        update.message.reply_text("⛔ Только админ может обновить базу.")
+        return
+
+    try:
+        knowledge_base.clear()
+        knowledge_base.extend(load_documents())
+        update.message.reply_text("🔄 База знаний успешно обновлена!")
+    except Exception as e:
+        update.message.reply_text(f"❌ Ошибка при обновлении базы: {e}")
+
 def main():
     updater = Updater(TELEGRAM_BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("обновить_базу", reload_knowledge))
     dp.add_handler(CallbackQueryHandler(handle_callback))
+    dp.add_handler(MessageHandler(Filters.document, handle_document))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
     updater.start_polling()
