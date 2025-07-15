@@ -33,7 +33,11 @@ THEMES = {
 }
 
 def start(update: Update, context: CallbackContext):
-    keyboard = [["📌 Гарантия 365"], ["📂 Мои результаты", "❓ Задать вопрос"], ["🧠 Потренироваться"]]
+    keyboard = [
+        ["📌 Гарантия 365"],
+        ["📂 Мои результаты", "❓ Задать вопрос"],
+        ["🧠 Потренироваться", "📤 Загрузить презентацию"]  # добавлена кнопка
+    ]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     update.message.reply_text("👋 Добро пожаловать! Выберите тему или режим:", reply_markup=markup)
 
@@ -86,6 +90,14 @@ def handle_message(update: Update, context: CallbackContext):
 
     if text == "⬅️ Назад в меню":
         start(update, context)
+        return
+
+    if text == "📤 Загрузить презентацию":
+        if user_id != ADMIN_ID:
+            update.message.reply_text("⛔ Только админ может загружать файлы.")
+            return
+        user_states[user_id] = {"mode": "upload"}
+        update.message.reply_text("📄 Пожалуйста, отправьте PDF-файл с презентацией.")
         return
 
     mode = user_states.get(user_id, {}).get("mode", "")
@@ -160,8 +172,15 @@ def send_question(chat_id, bot, user_id):
 
 def handle_document(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
+
+    # Только админ может загружать
     if user_id != ADMIN_ID:
-        update.message.reply_text("❌ У вас нет прав загружать документы.")
+        update.message.reply_text("⛔ У вас нет прав загружать документы.")
+        return
+
+    state = user_states.get(user_id, {})
+    if state.get("mode") != "upload":
+        update.message.reply_text("⚠️ Сейчас бот не ожидает загрузки файла.")
         return
 
     doc = update.message.document
@@ -169,10 +188,16 @@ def handle_document(update: Update, context: CallbackContext):
         update.message.reply_text("⚠️ Не удалось получить файл.")
         return
 
+    if not doc.file_name.endswith(".pdf"):
+        update.message.reply_text("❌ Пожалуйста, загружайте только PDF-файлы.")
+        return
+
     os.makedirs("presentations", exist_ok=True)
     file_path = f"presentations/{doc.file_name}"
     doc.get_file().download(custom_path=file_path)
-    update.message.reply_text(f"✅ Файл «{doc.file_name}» загружен в папку /presentations.")
+
+    update.message.reply_text(f"✅ Файл «{doc.file_name}» успешно загружен в папку /presentations.")
+    user_states[user_id] = {}  # сброс режима
 
 def reload_knowledge(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
