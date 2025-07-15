@@ -1,56 +1,54 @@
-# knowledge_base.py
-from pathlib import Path
+import os
+import fitz  # pymupdf
+import docx
+from typing import List
 
-ROLE_TO_TOPICS = {
-    "client": ["ЛИТРО", "реакционные", "преимущества", "гарантия", "услуги", "комиссия"],
-    "manager": ["ситуации", "кейсы", "отказ", "клиент", "КАСКО", "кредит", "банк"]
-}
+knowledge_base: List[str] = []
 
-def load_documents():
+def load_pdf(file_path: str) -> str:
+    text = ""
+    with fitz.open(file_path) as doc:
+        for page in doc:
+            text += page.get_text()
+    return text
+
+def load_docx(file_path: str) -> str:
+    doc = docx.Document(file_path)
+    return "\n".join([p.text for p in doc.paragraphs])
+
+def split_text(text: str, max_tokens=500) -> List[str]:
     chunks = []
-    base_dir = Path("files")  # путь к папке с документами
-    
-    files = {
-        "реакционные скрипты Литро.pdf": base_dir / "реакционные скрипты Литро.pdf",
-        "Ситуационные кейсы.docx": base_dir / "Ситуационные кейсы.docx",
-        "Welcome-курс.docx": base_dir / "Welcome-курс.docx"
-    }
-
-    import docx, fitz  # PyMuPDF для PDF
-    for name, path in files.items():
-        if not path.exists(): continue
-
-        if path.suffix == ".docx":
-            doc = docx.Document(path)
-            text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-        elif path.suffix == ".pdf":
-            pdf = fitz.open(path)
-            text = "\n".join(page.get_text() for page in pdf)
+    current = ""
+    for paragraph in text.split("\n"):
+        if len(current) + len(paragraph) > max_tokens:
+            chunks.append(current.strip())
+            current = paragraph
         else:
-            continue
-        
-        # Разделение по смысловым блокам (на абзацы по 5 строк)
-        for part in text.split("\n\n"):
-            if len(part.strip()) > 100:
-                chunks.append({
-                    "source": name,
-                    "text": part.strip().replace("\n", " ")
-                })
-
+            current += "\n" + paragraph
+    if current.strip():
+        chunks.append(current.strip())
     return chunks
 
-def find_relevant_chunks(query: str, role: str, limit=3):
-    query_lower = query.lower()
-    topics = ROLE_TO_TOPICS.get(role, [])
-    results = []
+def load_documents(folder: str = "presentations") -> List[str]:
+    base = []
+    for filename in os.listdir(folder):
+        path = os.path.join(folder, filename)
+        if filename.endswith(".pdf"):
+            content = load_pdf(path)
+        elif filename.endswith(".docx"):
+            content = load_docx(path)
+        else:
+            continue
+        base.extend(split_text(content))
+    return base
 
+def find_relevant_chunks(query: str, role: str, top_k: int = 3) -> List[str]:
+    # очень простая метрика: находит фрагменты с совпадающими словами
+    scores = []
+    query_words = set(query.lower().split())
     for chunk in knowledge_base:
-        if any(topic in chunk["text"].lower() for topic in topics):
-            if query_lower.split()[0] in chunk["text"].lower():
-                results.append(chunk)
-    
-    return [c["text"] for c in results[:limit]]
-
-
-# Загружаем сразу при импорте
-knowledge_base = load_documents()
+        chunk_words = set(chunk.lower().split())
+        score = len(query_words & chunk_words)
+        scores.append((score, chunk))
+    scores.sort(reverse=True, key=lambda x: x[0])
+    return [chunk for score, chunk in scores[:top_k] if score > 0]
