@@ -4,4 +4,4 @@ openai
 python-docx
 pymupdf
 python-dotenv
-aiohttp==3.9.5  # обязательно добавить вручную, иначе aiogram не потянет его корректно
+aiohttp==3.8.6
