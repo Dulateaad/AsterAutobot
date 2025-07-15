@@ -1,6 +1,6 @@
-aiogram==3.3.0
+aiogram==3.0.0b7
+pydantic==1.10.13
 openai
 python-docx
 pymupdf
 python-dotenv
-pydantic==2.4.2
