@@ -1,5 +1,5 @@
 pyTelegramBotAPI==4.15.4
-openai
-python-docx
-pymupdf
 python-dotenv
+openai
+pymupdf
+python-docx
