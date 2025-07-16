@@ -19,7 +19,7 @@ user_results = {}
 
 THEMES = {
     "Гарантия 365": {
-        "presentation": "files/presentation.pdf",
+        "presentation": "presentations/presentation.pdf",
         "video_url": "https://youtu.be/fdVDF42lehU",
         "quiz": [
             {
