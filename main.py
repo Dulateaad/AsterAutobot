@@ -102,9 +102,10 @@ def handle_text(message):
     user_states[user_id] = {"mode": "theme", "theme": "Реакционные скрипты Литро", "current": 0, "score": 0}
     with open(THEMES["Реакционные скрипты Литро"]["presentation"], "rb") as doc:
         bot.send_document(message.chat.id, doc)
-    btn = types.InlineKeyboardMarkup()
-    btn.add(types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz"))
-    bot.send_message(message.chat.id, "🧪 Нажмите кнопку ниже для начала квиза.", reply_markup=btn)
+    bot.send_message(message.chat.id, "🧪 Когда будете готовы, нажмите кнопку ниже для начала квиза.",
+        reply_markup=types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz")
+        ))
     
     elif text == "📂 Мои результаты":
         results = user_results.get(user_id, [])
