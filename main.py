@@ -70,7 +70,6 @@ THEMES = {
 }
 
 # == Команды ==
-
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -91,22 +90,25 @@ def reload_knowledge(message):
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ Ошибка при обновлении базы: {e}")
 
-# == Обработка текстовых сообщений ==
-
+# == Обработка текста ==
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     user_id = message.from_user.id
     text = message.text.strip()
 
     if text == "📌 Реакционные скрипты Литро":
-    user_states[user_id] = {"mode": "theme", "theme": "Реакционные скрипты Литро", "current": 0, "score": 0}
-    with open(THEMES["Реакционные скрипты Литро"]["presentation"], "rb") as doc:
-        bot.send_document(message.chat.id, doc)
-    bot.send_message(message.chat.id, "🧪 Когда будете готовы, нажмите кнопку ниже для начала квиза.",
-        reply_markup=types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz")
-        ))
-    
+        user_states[user_id] = {
+            "mode": "theme",
+            "theme": "Реакционные скрипты Литро",
+            "current": 0,
+            "score": 0
+        }
+        with open(THEMES["Реакционные скрипты Литро"]["presentation"], "rb") as doc:
+            bot.send_document(message.chat.id, doc)
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz"))
+        bot.send_message(message.chat.id, "🧪 Когда будете готовы, нажмите кнопку ниже для начала квиза.", reply_markup=markup)
+
     elif text == "📂 Мои результаты":
         results = user_results.get(user_id, [])
         if not results:
@@ -147,13 +149,11 @@ def handle_text(message):
         if mode in ["chat", "train"]:
             role = user_states[user_id].get("role", "client")
             context_chunks = find_relevant_chunks(text, role) if mode == "train" else []
-
             system_prompt = {
                 "chat": "Ты — помощник автосалона. Отвечай кратко и по делу.",
                 "client": "Ты — консультант AsterAuto. Отвечай как клиенту: просто, уверенно и по делу.",
                 "manager": "Ты — тренер для новых менеджеров AsterAuto. Объясняй профессионально и с опорой на скрипты."
             }[role if mode == "train" else "chat"]
-
             try:
                 response = openai.ChatCompletion.create(
                     model="gpt-3.5-turbo",
@@ -167,7 +167,6 @@ def handle_text(message):
                 bot.send_message(message.chat.id, f"⚠ Ошибка OpenAI: {e}")
 
 # == Квизы ==
-
 @bot.callback_query_handler(func=lambda call: call.data == "start_quiz" or ":" in call.data)
 def handle_callback(call):
     user_id = call.from_user.id
@@ -214,7 +213,6 @@ def send_question(chat_id, user_id):
     bot.send_message(chat_id, f"🧪 {q['q']}", reply_markup=markup)
 
 # == Запуск ==
-
 if __name__ == "__main__":
     print("🚀 Бот запущен на pyTelegramBotAPI!")
     bot.infinity_polling()
