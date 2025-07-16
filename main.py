@@ -1,27 +1,22 @@
 import os
 import datetime
-import requests
 import telebot
 from telebot import types
 from dotenv import load_dotenv
 from knowledge_base import find_relevant_chunks, load_documents, knowledge_base
 import openai
 
-# Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
-# Инициализация бота
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 openai.api_key = OPENAI_API_KEY
 
-# Состояния пользователя и результаты
 user_states = {}
 user_results = {}
 
-# Темы и квизы
 THEMES = {
     "Реакционные скрипты Литро": {
         "presentation": "presentations/реакционные скрипты Литро(1).pptx",
@@ -74,7 +69,7 @@ THEMES = {
     }
 }
 
-# Команда /start
+# == Команды ==
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -83,7 +78,6 @@ def handle_start(message):
     keyboard.add("🧠 Потренироваться")
     bot.send_message(message.chat.id, "👋 Добро пожаловать! Выберите тему или режим:", reply_markup=keyboard)
 
-# Обновить базу знаний
 @bot.message_handler(commands=["обновить_базу"])
 def reload_knowledge(message):
     if message.from_user.id != ADMIN_ID:
@@ -96,7 +90,7 @@ def reload_knowledge(message):
     except Exception as e:
         bot.send_message(message.chat.id, f"❌ Ошибка при обновлении базы: {e}")
 
-# Текстовые сообщения
+# == Обработка текста ==
 @bot.message_handler(func=lambda m: True)
 def handle_text(message):
     user_id = message.from_user.id
@@ -109,8 +103,7 @@ def handle_text(message):
             "current": 0,
             "score": 0
         }
-        with open(THEMES["Реакционные скрипты Литро"]["presentation"], "rb") as doc:
-            bot.send_document(message.chat.id, doc)
+        bot.send_message(message.chat.id, "🎯 Вы выбрали тему: Реакционные скрипты Литро")
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz"))
         bot.send_message(message.chat.id, "🧪 Когда будете готовы, нажмите кнопку ниже для начала квиза.", reply_markup=markup)
@@ -172,7 +165,7 @@ def handle_text(message):
             except Exception as e:
                 bot.send_message(message.chat.id, f"⚠ Ошибка OpenAI: {e}")
 
-# Квизы
+# == Квизы ==
 @bot.callback_query_handler(func=lambda call: call.data == "start_quiz" or ":" in call.data)
 def handle_callback(call):
     user_id = call.from_user.id
@@ -218,8 +211,7 @@ def send_question(chat_id, user_id):
         markup.add(types.InlineKeyboardButton(option, callback_data=f"{index}:{i}"))
     bot.send_message(chat_id, f"🧪 {q['q']}", reply_markup=markup)
 
-# Запуск
+# == Запуск ==
 if __name__ == "__main__":
-    requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook")
     print("🚀 Бот запущен на pyTelegramBotAPI!")
     bot.infinity_polling()
