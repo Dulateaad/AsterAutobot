@@ -1,11 +1,7 @@
 import os
 import datetime
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
-from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram import Router
+import telebot
+from telebot import types
 from dotenv import load_dotenv
 from knowledge_base import find_relevant_chunks, load_documents, knowledge_base
 import openai
@@ -15,12 +11,8 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 openai.api_key = OPENAI_API_KEY
-
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
-dp = Dispatcher()
-router = Router()
-dp.include_router(router)
 
 user_states = {}
 user_results = {}
@@ -44,110 +36,126 @@ THEMES = {
     }
 }
 
-@router.message(Command("start"))
-async def start(message: Message):
-    keyboard = [["📌 Гарантия 365"], ["📂 Мои результаты", "❓ Задать вопрос"], ["🧠 Потренироваться"]]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await message.answer("👋 Добро пожаловать! Выберите тему или режим:", reply_markup=markup)
+# == Команды ==
 
-@router.message(F.text)
-async def handle_message(message: Message):
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add("📌 Гарантия 365")
+    keyboard.add("📂 Мои результаты", "❓ Задать вопрос")
+    keyboard.add("🧠 Потренироваться")
+    bot.send_message(message.chat.id, "👋 Добро пожаловать! Выберите тему или режим:", reply_markup=keyboard)
+
+@bot.message_handler(commands=["обновить_базу"])
+def reload_knowledge(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.send_message(message.chat.id, "⛔ Только админ может обновить базу.")
+        return
+    try:
+        knowledge_base.clear()
+        knowledge_base.extend(load_documents())
+        bot.send_message(message.chat.id, "🔄 База знаний успешно обновлена!")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ Ошибка при обновлении базы: {e}")
+
+# == Обработка текстовых сообщений ==
+
+@bot.message_handler(func=lambda m: True)
+def handle_text(message):
     user_id = message.from_user.id
     text = message.text.strip()
 
     if text == "📌 Гарантия 365":
         user_states[user_id] = {"mode": "theme", "theme": "Гарантия 365", "current": 0, "score": 0}
-        await message.answer_document(open(THEMES["Гарантия 365"]["presentation"], "rb"))
-        await message.answer(f"🎬 Видео: {THEMES['Гарантия 365']['video_url']}")
-        await message.answer("🧪 Когда будете готовы, нажмите кнопку ниже для начала квиза.",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🧪 Пройти квиз", callback_data="start_quiz")]]))
-        return
+        with open(THEMES["Гарантия 365"]["presentation"], "rb") as doc:
+            bot.send_document(message.chat.id, doc)
+        bot.send_message(message.chat.id, f"🎬 Видео: {THEMES['Гарантия 365']['video_url']}")
+        btn = types.InlineKeyboardMarkup()
+        btn.add(types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz"))
+        bot.send_message(message.chat.id, "🧪 Нажмите кнопку ниже для начала квиза.", reply_markup=btn)
 
-    if text == "📂 Мои результаты":
+    elif text == "📂 Мои результаты":
         results = user_results.get(user_id, [])
         if not results:
-            await message.answer("📭 Вы ещё не проходили квизы.")
+            bot.send_message(message.chat.id, "📭 Вы ещё не проходили квизы.")
         else:
             result_text = "🗂 Ваши результаты:\n" + "\n".join(
                 [f"• {r['theme']} — {r['score']}/{r['total']} ({r['date']})" for r in results]
             )
-            await message.answer(result_text)
-        return
+            bot.send_message(message.chat.id, result_text)
 
-    if text == "❓ Задать вопрос":
+    elif text == "❓ Задать вопрос":
         user_states[user_id] = {"mode": "chat"}
-        await message.answer("✍️ Введите свой вопрос:")
-        return
+        bot.send_message(message.chat.id, "✍️ Введите свой вопрос:")
 
-    if text == "🧠 Потренироваться":
+    elif text == "🧠 Потренироваться":
         user_states[user_id] = {"mode": "select_role"}
-        markup = ReplyKeyboardMarkup(keyboard=[["🙋‍♂️ Я клиент", "💼 Я менеджер"]], resize_keyboard=True)
-        await message.answer("Выберите роль:", reply_markup=markup)
-        return
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("🙋‍♂️ Я клиент", "💼 Я менеджер")
+        bot.send_message(message.chat.id, "Выберите роль:", reply_markup=markup)
 
-    if text == "🙋‍♂️ Я клиент":
+    elif text == "🙋‍♂️ Я клиент":
         user_states[user_id] = {"mode": "train", "role": "client"}
-        markup = ReplyKeyboardMarkup(keyboard=[["⬅️ Назад в меню"]], resize_keyboard=True)
-        await message.answer("Отлично! Задавайте свои вопросы как клиент.", reply_markup=markup)
-        return
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("⬅️ Назад в меню")
+        bot.send_message(message.chat.id, "Задайте вопрос как клиент.", reply_markup=markup)
 
-    if text == "💼 Я менеджер":
+    elif text == "💼 Я менеджер":
         user_states[user_id] = {"mode": "train", "role": "manager"}
-        markup = ReplyKeyboardMarkup(keyboard=[["⬅️ Назад в меню"]], resize_keyboard=True)
-        await message.answer("Хорошо! Задавайте вопросы, как менеджер.", reply_markup=markup)
-        return
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("⬅️ Назад в меню")
+        bot.send_message(message.chat.id, "Задайте вопрос как менеджер.", reply_markup=markup)
 
-    if text == "⬅️ Назад в меню":
-        await start(message)
-        return
+    elif text == "⬅️ Назад в меню":
+        handle_start(message)
 
-    mode = user_states.get(user_id, {}).get("mode", "")
-    if mode in ["chat", "train"]:
-        role = user_states[user_id].get("role", "client")
-        context_chunks = find_relevant_chunks(text, role) if mode == "train" else []
+    else:
+        mode = user_states.get(user_id, {}).get("mode", "")
+        if mode in ["chat", "train"]:
+            role = user_states[user_id].get("role", "client")
+            context_chunks = find_relevant_chunks(text, role) if mode == "train" else []
 
-        system_prompt = {
-            "chat": "Ты — помощник автосалона. Отвечай кратко и по делу.",
-            "client": "Ты — консультант AsterAuto. Отвечай как клиенту: просто, уверенно и по делу.",
-            "manager": "Ты — тренер для новых менеджеров AsterAuto. Объясняй профессионально и с опорой на скрипты."
-        }[role if mode == "train" else "chat"]
+            system_prompt = {
+                "chat": "Ты — помощник автосалона. Отвечай кратко и по делу.",
+                "client": "Ты — консультант AsterAuto. Отвечай как клиенту: просто, уверенно и по делу.",
+                "manager": "Ты — тренер для новых менеджеров AsterAuto. Объясняй профессионально и с опорой на скрипты."
+            }[role if mode == "train" else "chat"]
 
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt + ("\n\n📚 Информация:\n" + "\n---\n".join(context_chunks) if context_chunks else "")},
-                    {"role": "user", "content": text}
-                ]
-            )
-            await message.answer(response["choices"][0]["message"]["content"].strip())
-        except Exception as e:
-            await message.answer(f"⚠ Ошибка OpenAI: {str(e)}")
+            try:
+                response = openai.ChatCompletion.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": system_prompt + ("\n\n📚 Информация:\n" + "\n---\n".join(context_chunks) if context_chunks else "")},
+                        {"role": "user", "content": text}
+                    ]
+                )
+                bot.send_message(message.chat.id, response['choices'][0]['message']['content'].strip())
+            except Exception as e:
+                bot.send_message(message.chat.id, f"⚠ Ошибка OpenAI: {e}")
 
-@router.callback_query()
-async def handle_callback(callback):
-    user_id = callback.from_user.id
-    data = callback.data
-    await callback.answer()
+# == Квизы ==
+
+@bot.callback_query_handler(func=lambda call: call.data == "start_quiz" or ":" in call.data)
+def handle_callback(call):
+    user_id = call.from_user.id
+    data = call.data
+    chat_id = call.message.chat.id
 
     if data == "start_quiz":
         user_states[user_id]["mode"] = "quiz"
         user_states[user_id]["current"] = 0
         user_states[user_id]["score"] = 0
-        await send_question(callback.message.chat.id, user_id)
-        return
-
-    if ":" in data:
+        send_question(chat_id, user_id)
+    else:
         q_index, selected = map(int, data.split(":"))
         theme = user_states[user_id]["theme"]
-        quiz = THEMES[theme]["quiz"]
-        correct = quiz[q_index]["answer"]
+        correct = THEMES[theme]["quiz"][q_index]["answer"]
         if selected == correct:
             user_states[user_id]["score"] += 1
         user_states[user_id]["current"] += 1
-        await send_question(callback.message.chat.id, user_id)
+        send_question(chat_id, user_id)
 
-async def send_question(chat_id, user_id):
+def send_question(chat_id, user_id):
     state = user_states[user_id]
     theme = state["theme"]
     quiz = THEMES[theme]["quiz"]
@@ -163,33 +171,17 @@ async def send_question(chat_id, user_id):
             "date": datetime.datetime.now().strftime("%Y-%m-%d")
         })
         user_states[user_id]["mode"] = "theme"
-        await bot.send_message(chat_id, f"✅ Квиз завершён!\nВы ответили правильно на {score} из {total}.")
+        bot.send_message(chat_id, f"✅ Квиз завершён!\nВы ответили правильно на {score} из {total}.")
         return
 
     q = quiz[index]
-    buttons = [[InlineKeyboardButton(text=opt, callback_data=f"{index}:{i}")] for i, opt in enumerate(q["options"])]
-    markup = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await bot.send_message(chat_id, f"🧪 {q['q']}", reply_markup=markup)
+    markup = types.InlineKeyboardMarkup()
+    for i, option in enumerate(q["options"]):
+        markup.add(types.InlineKeyboardButton(option, callback_data=f"{index}:{i}"))
+    bot.send_message(chat_id, f"🧪 {q['q']}", reply_markup=markup)
 
-@router.message(Command("обновить_базу"))
-async def reload_knowledge(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("⛔ Только админ может обновить базу.")
-        return
-
-    try:
-        knowledge_base.clear()
-        knowledge_base.extend(load_documents())
-        await message.answer("🔄 База знаний успешно обновлена!")
-    except Exception as e:
-        await message.answer(f"❌ Ошибка при обновлении базы: {e}")
-
-# 🔁 Запуск
-import asyncio
+# == Запуск ==
 
 if __name__ == "__main__":
-    async def main():
-        print("🚀 Бот AsterAuto запущен на aiogram!")
-        await dp.start_polling(bot)
-
-    asyncio.run(main())
+    print("🚀 Бот запущен на pyTelegramBotAPI!")
+    bot.infinity_polling()
