@@ -19,7 +19,7 @@ user_results = {}
 
 THEMES = {
     "Реакционные скрипты Литро": {
-        "presentation": "presentations/реакционные скрипты Литро(1).pdf",
+        "presentation": "presentations/реакционные скрипты Литро.pdf",
         "quiz": [
             {
                 "q": "1. “Мне не нужна техпомощь, я сам справлюсь”",
