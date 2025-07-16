@@ -1,5 +1,5 @@
-pyTelegramBotAPI==4.15.4
-python-dotenv
-openai
-pymupdf
-python-docx
+python-telegram-bot==13.15
+pyTelegramBotAPI==4.12.0
+openai==0.28.1
+python-dotenv==1.0.0
+tiktoken==0.5.1
