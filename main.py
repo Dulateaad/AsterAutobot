@@ -103,7 +103,11 @@ def handle_text(message):
             "current": 0,
             "score": 0
         }
-        bot.send_message(message.chat.id, "🎯 Вы выбрали тему: Реакционные скрипты Литро")
+        try:
+            with open(THEMES["Реакционные скрипты Литро"]["presentation"], "rb") as doc:
+                bot.send_document(message.chat.id, doc)
+        except Exception as e:
+            bot.send_message(message.chat.id, f"⚠️ Ошибка при отправке презентации: {e}")
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton("🧪 Пройти квиз", callback_data="start_quiz"))
         bot.send_message(message.chat.id, "🧪 Когда будете готовы, нажмите кнопку ниже для начала квиза.", reply_markup=markup)
