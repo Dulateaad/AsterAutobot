@@ -1,7 +1,5 @@
-aiogram==3.0.0b7
-pydantic==1.10.13
+pyTelegramBotAPI==4.15.4
 openai
 python-docx
 pymupdf
 python-dotenv
-aiohttp==3.8.6
