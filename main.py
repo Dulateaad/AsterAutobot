@@ -31,8 +31,7 @@ THEMES = {
                     "E) Вы можете попробовать сами, но потом всё равно придётся обращаться к нам"
                 ],
                 "answer": 1
-            },
-            # ... другие вопросы
+            }
         ]
     },
     "Гарантия 365": {
@@ -59,6 +58,18 @@ def handle_start(message):
     keyboard.add("📂 Мои результаты", "❓ Задать вопрос")
     keyboard.add("🧠 Потренироваться")
     bot.send_message(message.chat.id, "👋 Добро пожаловать! Выберите тему или режим:", reply_markup=keyboard)
+
+    user = message.from_user
+    username = user.username
+    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    user_link = f"@{username}" if username else f'<a href="tg://user?id={user.id}">{full_name or "Пользователь"}</a>'
+
+    if user.id != ADMIN_ID:
+        bot.send_message(
+            ADMIN_ID,
+            f"👤 Новый пользователь:\n\n🆔 <code>{user.id}</code>\n🔗 {user_link}",
+            parse_mode="HTML"
+        )
 
 @bot.message_handler(commands=["обновить_базу"])
 def reload_knowledge(message):
