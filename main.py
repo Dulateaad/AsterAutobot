@@ -1,6 +1,6 @@
 from telebot import TeleBot, types
 
-BOT_TOKEN = "8033791209:AAHZEszg8dT5SYjEpojaFDillogwmfldi5I
+BOT_TOKEN = "8033791209:AAHZEszg8dT5SYjEpojaFDillogwmfldi5I"
 "   # ← сюда вставляешь токен
 bot = TeleBot(BOT_TOKEN, parse_mode="HTML")
 
